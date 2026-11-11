@@ -1,4 +1,4 @@
-# CSHL Fall 2028 Computational Genomics Course
+# CSHL Fall 2026 Computational Genomics Course
 Welcome! This is the material and tutorials for the Chromatin Workshop. This workshop was developed by Gabriel Beuchat. Thank you, Gabriel!
 The database adopted in this course is under the reference: "Enhancer Chromatin and 3D Genome Architecture Changes from Naive to Primed Human Embryonic Stem Cell States". https://www.sciencedirect.com/science/article/pii/S2213671119301262?via%3Dihub <br />
 
