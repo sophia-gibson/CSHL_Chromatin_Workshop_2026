@@ -47,7 +47,7 @@ The database adopted in this course is under the reference: "Enhancer Chromatin 
 We will use the data and scripts stored here, but continue to follow THIS VERSION OF THE README!
 `cp -r /grid/genomicscourse/home/shared/CSHL_Chromatin_Workshop_2025 ~`
 
-`rm ~/CSHL_Chromain_Workshop_2025/README.md`
+`rm ~/CSHL_Chromatin_Workshop_2025/README.md`
 
 
 
@@ -293,10 +293,25 @@ samtools idxstats ${sorted.bam.file} | cut -f1 | grep -v Mt | xargs samtools vie
 
 - Histone modification" *H3K27ac:* broad peaks; *H3K4me3* narrow peaks. <br />   
 
+**Let's all redo this step to get on the same page**
 
 ```bash
+datadir="$HOME/CSHL_Chromatin_Workshop_2025"
+dir=${datadir}/data/subset
+
+rm *narrowPeak
+rm *broadPeak
+rm *peaks.xls
+rm *macs3.log
+```
+
+
+
+```bash
+
 source /grid/genomicscourse/home/shared/conda_2025/miniconda3/bin/activate
 conda activate macs3
+cd ~/CSHL_Chromatin_Workshop_2026/data/subset/
 
 input_combinations_broad=(
 "SRR5063143_naive_H3K27ac_treat.bam,SRR5063153_naive_input_treat.bam"
@@ -308,63 +323,46 @@ input_combinations_narrow=(
 "SRR5063150_naive_H3K4me3_treat.bam,SRR5063154_naive_input_treat.bam"
 )
 
-
-for files in ${input_combinations_broad[@]}; do
-
-#the below line is handy for reading in tables, for example. In this case the "table" is generated
-#in the previous lines, but you could imagine them written as a comma-separated file like a .csv
-    #the <<< is basically telling unix to run whatever is to the left of it on whatever is to the right of it.
-    #IFS stands for Internal Field Separator, and is just a way to tell unix the delimiter it should use to split
-    #the input. read -r is used to take input from the user and assign it to a variable (or more).
-    #because you are running it before the <<< you are telling read to treat $files as the user input and assign it to
-    #variables $file1 and $file2, and to split it based on the IFS of ','
-
-IFS=',' read -r file1 file2 <<< $files
-##macs2-broad
-macs3 callpeak  -t  $file1 -c $file2 \
-        -f BAM  -g 50818468 --nomodel --shift -100 --extsize 200 \
-        -n ${file1%_treat.bam} --broad \
-        --outdir . 2> ${file1%_treat.bam}_broad_macs3.log
-done
-
-#macs3 will call peaks based on your bam(s). for more detail you can look at the macs manuals.
-    #in this specific case we are telling it to use the human genome size with -g hs, we are telling it
-    #not to make a model of the binding, because there are some assays that result in reads offset from
-    #the actual site of binding for whatever you are testing for, but chip seq on histone modifications
-    #is not one of them. (chip seq on transcription factors is, though)
-    #instead we are going to manually shift and extend the read to make up for the fact that we are using single end
-    #data instead of paired end data, so that we can have a longer insert sizes around the place we are sequencing.
-    #--outdir . is just a way unix uses to say "the current directory" or in the case of moving files "the current file name."
-    #the 2> *.log is telling the command to redirect the error logs to that file.
-
-    #In this specific case, we need to provide the -c control bam, but not all assays require this. All chip seq does but
-    #for example ATACseq does not. If you simply do no include a -c flag and file it will not use one.
-
-for files in ${input_combinations_narrow[@]}; do
-
-IFS=',' read -r file1 file2 <<< $files
-##macs2-narrow
-macs3 callpeak  -t  $file1 -c $file2 \
-        -f BAM  -g 50818468  --shift -100 --extsize 200 \
-        -n ${file1%_treat.bam}  \
-        --outdir . 2> ${file1%_treat.bam}_narrow_macs3.log
-
-done
-
-#MACS outputs the peak files in .narrowPeak or .broadPeak format.
-#I would usually recommend clearly keeping the labels on these so you don't lose track,
-#but for downstream convenience we will rename them today.
-for peakfile in `ls *.broadPeak`
-do
-mv ${peakfile} ${peakfile//\.broadPeak/\.Peak}
-done
-
-for peakfile in `ls *.narrowPeak`
-do
-mv ${peakfile} ${peakfile//\.narrowPeak/\.Peak}
-done
-
 ```
+
+run `declare declare -p input_combinations_broad` AND `declare declare -p input_combinations_narrow` to make sure the array is set up correctly
+
+Now we're ready for peak calling!
+
+```bash
+
+for files in "${input_combinations_broad[@]}"; do
+  IFS=',' read -r file1 file2 <<< "$files"
+  echo "Calling broad peaks on ${file1} ..."
+  macs3 callpeak -t "$file1" -c "$file2" -f BAM -g 50818468 --nomodel --shift -100 --extsize 200 -n "${file1%_treat.bam}" --broad --outdir . 2> "${file1%_treat.bam}_broad_macs3.log"
+done
+
+for files in "${input_combinations_narrow[@]}"; do
+  IFS=',' read -r file1 file2 <<< "$files"
+  echo "Calling narrow peaks on ${file1} ..."
+  macs3 callpeak -t "$file1" -c "$file2" -f BAM -g 50818468 --nomodel --shift -100 --extsize 200 -n "${file1%_treat.bam}" --outdir . 2> "${file1%_treat.bam}_narrow_macs3.log"
+done
+
+for peakfile in *.broadPeak *.narrowPeak; do
+  mv "$peakfile" "${peakfile%.*}.Peak"
+done
+
+ls -lh *_peaks.Peak
+tail -n 2 *_macs3.log
+```
+
+You should see **four** `*_peaks.Peak` files. If one is missing, open its `*_macs3.log` file (`less SRR..._macs3.log`); MACS3 writes its errors there instead of to the screen.
+
+**What the commands are doing**
+- `IFS=',' read -r file1 file2 <<< "$files"` splits each `"treatment,control"` pair at the comma into `$file1` (treatment) and `$file2` (control/input). `IFS` (Internal Field Separator) sets the delimiter, and `<<<` feeds the string to `read`. The same trick is handy for reading a comma-separated table such as a `.csv`.
+- `macs3 callpeak` calls peaks from the BAMs (see the MACS3 manual for details):
+  - `-t` / `-c`: the treatment BAM and the control (input) BAM. All ChIP-seq needs a control; some assays, such as ATAC-seq, don't. If you leave out `-c`, MACS3 runs without one.
+  - `-g 50818468`: the effective genome size. We use the size of our subset genome here rather than `-g hs` (whole human genome).
+  - `--nomodel --shift -100 --extsize 200`: don't build a fragment-size model. Some assays (e.g., transcription-factor ChIP) produce reads offset from the binding site, but histone-mark ChIP doesn't. Instead, we manually shift and extend each read to approximate the fragment, since the data are single-end.
+  - `--broad`: used for H3K27ac (broad mark); H3K4me3 is called as narrow peaks.
+  - `--outdir .`: write output to the current directory (`.` means "here").
+  - `2> name.log`: send MACS3's messages and errors to a log file instead of the screen.
+- The last loop renames `.broadPeak`/`.narrowPeak` to `.Peak` for convenience in later steps. Normally I'd recommend keeping the original extensions so you don't lose track of which is which.
 
 ## 6) QC Peaks (FRiP Scores) 
 - bedtools and samtools: *~ 3 min* <br />
